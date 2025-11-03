@@ -23,6 +23,8 @@ import math
 import random
 from typing import List, Dict, Optional
 
+from .metrics import erlang_c_metrics
+
 @dataclass
 class SimulationParams:
     arrival_rate_lambda: float  # λ [patients/hour]
@@ -215,8 +217,13 @@ class SimulationEngine:
         rho = lam / (c * mu) if (c > 0 and mu > 0) else None
 
         avg_Wq = (self._total_wait_time / self._served_patients) if self._served_patients > 0 else None
-        avg_W  = (self._total_system_time / self._served_patients) if self._served_patients > 0 else None
+        avg_W = (self._total_system_time / self._served_patients) if self._served_patients > 0 else None
         avg_Lq = (sum(self._queue_length_samples) / len(self._queue_length_samples)) if self._queue_length_samples else None
-        avg_L  = (sum(self._system_length_samples) / len(self._system_length_samples)) if self._system_length_samples else None
+        avg_L = (sum(self._system_length_samples) / len(self._system_length_samples)) if self._system_length_samples else None
 
-        return {"rho": rho, "Wq": avg_Wq, "W": avg_W, "Lq": avg_Lq, "L": avg_L}
+        analytical = erlang_c_metrics(lam, mu, c)
+
+        return {
+            "empirical": {"rho": rho, "Wq": avg_Wq, "W": avg_W, "Lq": avg_Lq, "L": avg_L},
+            "theoretical": analytical,
+        }

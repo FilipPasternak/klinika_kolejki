@@ -142,6 +142,9 @@ class SimulationEngine:
             arrival_t = self._next_arrival_time
             self.sim_time = arrival_t
             self._on_new_patient(arrival_t)
+            # Allow immediately-available servers to start service at the exact
+            # arrival timestamp.
+            self._assign_waiting_patients()
             self._next_arrival_time = self.sim_time + self._sample_interarrival_time()
 
         self.sim_time = new_time

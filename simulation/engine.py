@@ -178,9 +178,11 @@ class SimulationEngine:
                 continue
             srv.time_remaining -= dt
             if srv.time_remaining <= 0.0 and srv.patient_id is not None:
+                overshoot = -srv.time_remaining
+                completion_time = self.sim_time - overshoot
                 pid = srv.patient_id
                 patient = self._patients[pid]
-                patient.service_end_time = self.sim_time
+                patient.service_end_time = completion_time
                 if patient.service_start_time is not None:
                     self._total_wait_time += (patient.service_start_time - patient.arrival_time)
                 self._total_system_time += (patient.service_end_time - patient.arrival_time)

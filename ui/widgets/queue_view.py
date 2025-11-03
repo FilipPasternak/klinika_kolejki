@@ -20,6 +20,9 @@ SERVER_Y = 20
 SMOOTH_MIN_STEP = 0.12
 SMOOTH_MAX_STEP = 0.45
 SMOOTH_DISTANCE_SCALE = 60.0
+EXIT_TARGET_Y = -220
+EXIT_REMOVE_THRESHOLD_Y = -210
+TIMER_VERTICAL_OFFSET = PATIENT_RADIUS + 6
 
 
 class QueueView(QWidget):
@@ -81,6 +84,7 @@ class QueueView(QWidget):
         for idx, pid in enumerate(snapshot.queue):
             pos = QPointF(idx * QUEUE_SPACING, QUEUE_Y)
             self._set_patient_target(pid, pos, immediate)
+            self._set_patient_timer(pid, None)
             active_patients.add(pid)
             max_x = max(max_x, pos.x())
 
@@ -91,13 +95,17 @@ class QueueView(QWidget):
                 continue
             pos = QPointF(srv_idx * SERVER_SPACING, SERVER_Y)
             self._set_patient_target(pid, pos, immediate)
+            self._set_patient_timer(pid, srv_info)
             active_patients.add(pid)
             max_x = max(max_x, pos.x())
 
         # Remove patients no longer present
         for pid in list(self.patient_items.keys()):
             if pid not in active_patients:
-                self._remove_patient(pid)
+                if immediate:
+                    self._remove_patient(pid)
+                else:
+                    self._mark_patient_exiting(pid)
 
         if not immediate:
             self._animate_patients()
@@ -133,37 +141,49 @@ class QueueView(QWidget):
             label.setPos(x - label.boundingRect().width() / 2, SERVER_Y - 30)
 
     def _set_patient_target(self, pid: int, pos: QPointF, immediate: bool):
+        created = False
         if pid not in self.patient_items:
             item = QGraphicsEllipseItem(-PATIENT_RADIUS, -PATIENT_RADIUS, PATIENT_RADIUS * 2, PATIENT_RADIUS * 2)
             item.setBrush(QBrush(QColor("#ef476f")))
             item.setPen(QPen(QColor("#9b1d2a"), 1.5))
+            item.setZValue(1)
             self.scene.addItem(item)
 
             label = QGraphicsSimpleTextItem(str(pid))
             label.setBrush(QBrush(QColor("white")))
+            label.setZValue(2)
             self.scene.addItem(label)
 
-            self.patient_items[pid] = {"item": item, "label": label, "target": QPointF(pos)}
-            item.setPos(pos.x() - PATIENT_RADIUS, pos.y() - PATIENT_RADIUS)
-            label.setPos(pos.x() - label.boundingRect().width() / 2, pos.y() - 10)
-            return
+            timer_label = QGraphicsSimpleTextItem("")
+            timer_label.setBrush(QBrush(QColor("#1b4f72")))
+            timer_label.setVisible(False)
+            timer_label.setZValue(2)
+            self.scene.addItem(timer_label)
 
-        self.patient_items[pid]["target"] = QPointF(pos)
-        if immediate:
+            self.patient_items[pid] = {
+                "item": item,
+                "label": label,
+                "timer": timer_label,
+                "target": QPointF(pos),
+                "current": QPointF(pos),
+                "exiting": False,
+            }
+            created = True
+
+        data = self.patient_items[pid]
+        data["target"] = QPointF(pos)
+        data["exiting"] = False
+        if immediate or created:
             self._move_patient_immediately(pid)
 
     def _move_patient_immediately(self, pid: int):
         data = self.patient_items[pid]
-        item = data["item"]
-        label = data["label"]
         target = data["target"]
-        item.setPos(target.x() - PATIENT_RADIUS, target.y() - PATIENT_RADIUS)
-        label.setPos(target.x() - label.boundingRect().width() / 2, target.y() - 10)
+        self._apply_patient_position(pid, target)
 
     def _animate_patients(self):
         for pid, data in self.patient_items.items():
             item = data["item"]
-            label = data["label"]
             target = data["target"]
 
             current = QPointF(item.pos().x() + PATIENT_RADIUS, item.pos().y() + PATIENT_RADIUS)
@@ -176,8 +196,10 @@ class QueueView(QWidget):
             step = 1.0 - math.exp(-distance / SMOOTH_DISTANCE_SCALE)
             step = max(SMOOTH_MIN_STEP, min(step, SMOOTH_MAX_STEP))
             new_pos = current + delta * step
-            item.setPos(new_pos.x() - PATIENT_RADIUS, new_pos.y() - PATIENT_RADIUS)
-            label.setPos(new_pos.x() - label.boundingRect().width() / 2, new_pos.y() - 10)
+            self._apply_patient_position(pid, new_pos)
+
+            if data.get("exiting") and data["current"].y() <= EXIT_REMOVE_THRESHOLD_Y:
+                self._remove_patient(pid)
 
     def _remove_patient(self, pid: int):
         data = self.patient_items.pop(pid, None)
@@ -185,4 +207,73 @@ class QueueView(QWidget):
             return
         self.scene.removeItem(data["item"])
         self.scene.removeItem(data["label"])
+        timer_label = data.get("timer")
+        if timer_label:
+            self.scene.removeItem(timer_label)
+
+    def _apply_patient_position(self, pid: int, center: QPointF):
+        data = self.patient_items.get(pid)
+        if not data:
+            return
+
+        data["current"] = QPointF(center)
+        item = data["item"]
+        label = data["label"]
+        timer_label = data.get("timer")
+
+        item.setPos(center.x() - PATIENT_RADIUS, center.y() - PATIENT_RADIUS)
+        label.setPos(center.x() - label.boundingRect().width() / 2, center.y() - label.boundingRect().height() / 2)
+
+        if timer_label:
+            timer_label.setPos(
+                center.x() - timer_label.boundingRect().width() / 2,
+                center.y() + TIMER_VERTICAL_OFFSET,
+            )
+
+    def _set_patient_timer(self, pid: int, srv_info: dict | None):
+        data = self.patient_items.get(pid)
+        if not data:
+            return
+
+        timer_label = data.get("timer")
+        if not timer_label:
+            return
+
+        if not srv_info or srv_info.get("patient_id") is None:
+            timer_label.setText("")
+            timer_label.setVisible(False)
+        else:
+            elapsed = srv_info.get("elapsed", 0.0)
+            total = srv_info.get("total", 0.0)
+            elapsed_txt = self._format_duration(elapsed)
+            text = elapsed_txt
+            if total > 0.0:
+                total_txt = self._format_duration(total)
+                text = f"{elapsed_txt} / {total_txt}"
+            timer_label.setText(text)
+            timer_label.setVisible(True)
+
+        # Refresh placement after text update
+        current = data.get("current", data.get("target", QPointF()))
+        self._apply_patient_position(pid, current)
+
+    @staticmethod
+    def _format_duration(hours_value: float) -> str:
+        total_seconds = max(hours_value, 0.0) * 3600.0
+        minutes = int(total_seconds // 60)
+        seconds = int(total_seconds % 60)
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def _mark_patient_exiting(self, pid: int):
+        data = self.patient_items.get(pid)
+        if not data or data.get("exiting"):
+            return
+
+        current = data.get("current")
+        if current is None:
+            item = data["item"]
+            current = QPointF(item.pos().x() + PATIENT_RADIUS, item.pos().y() + PATIENT_RADIUS)
+
+        data["target"] = QPointF(current.x(), EXIT_TARGET_Y)
+        data["exiting"] = True
 

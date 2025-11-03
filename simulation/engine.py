@@ -128,12 +128,25 @@ class SimulationEngine:
         in_service_view = {}
         for idx, srv in enumerate(self._servers):
             if srv.busy and srv.patient_id is not None:
+                patient = self._patients.get(srv.patient_id)
+                elapsed = 0.0
+                total = 0.0
+                if patient and patient.service_start_time is not None:
+                    elapsed = max(self.sim_time - patient.service_start_time, 0.0)
+                    total = max(srv.service_end_time - patient.service_start_time, 0.0)
                 in_service_view[idx] = {
                     "patient_id": srv.patient_id,
                     "remaining": max(srv.service_end_time - self.sim_time, 0.0),
+                    "elapsed": elapsed,
+                    "total": total,
                 }
             else:
-                in_service_view[idx] = {"patient_id": None, "remaining": 0.0}
+                in_service_view[idx] = {
+                    "patient_id": None,
+                    "remaining": 0.0,
+                    "elapsed": 0.0,
+                    "total": 0.0,
+                }
 
         metrics = self._compute_metrics_snapshot()
         return SimulationStateSnapshot(queue_copy, in_service_view, metrics, self.sim_time)

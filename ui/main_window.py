@@ -17,7 +17,7 @@ from .widgets.history_plot import HistoryPlotWidget
 class MainWindow(QMainWindow):
     def __init__(self, engine, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Clinic Queue Simulation")
+        self.setWindowTitle("Symulacja kolejki w klinice")
         self.engine = engine
 
         self._time_step = 0.1  # simulation hours per timer tick
@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         self.controls_panel.pause_requested.connect(self._on_pause_requested)
         self.controls_panel.reset_requested.connect(self._on_reset_requested)
         self.controls_panel.params_changed.connect(self._on_params_changed)
+        self.controls_panel.time_scale_changed.connect(self._on_time_scale_changed)
 
     def _create_timer(self):
         self.simulation_timer = QTimer(self)
@@ -116,4 +117,7 @@ class MainWindow(QMainWindow):
     def _on_params_changed(self, *_):
         if not self.engine.is_running():
             self._prepare_new_run(clear_history=True)
+
+    def _on_time_scale_changed(self, value: float):
+        self.engine.set_time_scale(value)
 

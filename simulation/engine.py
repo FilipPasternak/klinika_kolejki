@@ -1,36 +1,22 @@
-"""
-Simulation engine for an M/M/c-style clinic queue.
-
-Current stage:
-- No SimPy yet; a lightweight, manual, step-by-step loop.
-- Poisson arrivals with rate λ (per hour).
-- Exponential service with rate μ (per hour per server).
-- c parallel servers.
-- FIFO queue.
-- Empirical statistics updated as patients complete service.
-
-Intended GUI API:
-    engine.set_params(...)
-    engine.start()
-    engine.step(dt)    # advance by dt (simulation hours)
-    snap = engine.get_snapshot()
-
-This module does not depend on PyQt.
-"""
+"""Simulation engine for an M/M/c-style clinic queue driven by SimPy."""
 
 from dataclasses import dataclass
 import math
 import random
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
+import simpy
 
 from .metrics import erlang_c_metrics
+
 
 @dataclass
 class SimulationParams:
     arrival_rate_lambda: float  # λ [patients/hour]
     service_rate_mu: float      # μ [patients/hour/server]
     servers_c: int              # number of servers
-    time_scale: float = 1.0     # reserved for GUI use
+    time_scale: float = 1.0
+
 
 @dataclass
 class Patient:
@@ -39,11 +25,13 @@ class Patient:
     service_start_time: Optional[float] = None
     service_end_time: Optional[float] = None
 
+
 @dataclass
 class ServerSlot:
     busy: bool = False
     patient_id: Optional[int] = None
-    time_remaining: float = 0.0  # remaining service time (simulation hours)
+    service_end_time: float = 0.0  # absolute completion time in simulation hours
+
 
 class SimulationStateSnapshot:
     def __init__(self, queue, in_service, metrics, sim_time):
@@ -51,6 +39,7 @@ class SimulationStateSnapshot:
         self.in_service = in_service            # {server_index: {patient_id, remaining}}
         self.metrics = metrics                  # dict
         self.sim_time = sim_time                # float
+
 
 class SimulationEngine:
     def __init__(self):
@@ -69,14 +58,18 @@ class SimulationEngine:
         self._queue: List[int] = []
         self._servers: List[ServerSlot] = []
 
-        self._next_arrival_time: Optional[float] = None
+        self.env: Optional[simpy.Environment] = None
+        self._arrival_process: Optional[simpy.events.Process] = None
 
         self._total_wait_time = 0.0
         self._total_system_time = 0.0
         self._served_patients = 0
 
-        self._queue_length_samples: List[int] = []
-        self._system_length_samples: List[int] = []
+        self._last_sample_time = 0.0
+        self._queue_time_integral = 0.0
+        self._system_time_integral = 0.0
+        self._current_queue_length = 0
+        self._current_system_length = 0
 
     # ---- public API ----
 
@@ -84,6 +77,9 @@ class SimulationEngine:
         self.params.arrival_rate_lambda = float(arrival_rate_lambda)
         self.params.service_rate_mu = float(service_rate_mu)
         self.params.servers_c = int(servers_c)
+
+    def set_time_scale(self, time_scale: float):
+        self.params.time_scale = max(float(time_scale), 0.01)
 
     def start(self):
         self.sim_time = 0.0
@@ -94,14 +90,18 @@ class SimulationEngine:
         self._queue.clear()
         self._servers = [ServerSlot() for _ in range(self.params.servers_c)]
 
-        self._next_arrival_time = self.sim_time + self._sample_interarrival_time()
+        self.env = simpy.Environment()
+        self._arrival_process = self.env.process(self._arrival_generator())
 
         self._total_wait_time = 0.0
         self._total_system_time = 0.0
         self._served_patients = 0
 
-        self._queue_length_samples.clear()
-        self._system_length_samples.clear()
+        self._last_sample_time = 0.0
+        self._queue_time_integral = 0.0
+        self._system_time_integral = 0.0
+        self._current_queue_length = 0
+        self._current_system_length = 0
 
     def pause(self):
         self._running = False
@@ -115,16 +115,13 @@ class SimulationEngine:
         return self._running
 
     def step(self, dt: float):
-        if not self._running or dt <= 0:
+        if not self._running or dt <= 0 or self.env is None:
             return
 
-        # basic sub-stepping to avoid jumping over events
-        sub_dt = 0.01
-        steps = max(1, int(dt / sub_dt))
-        real_sub_dt = dt / steps
-
-        for _ in range(steps):
-            self._advance_one_tick(real_sub_dt)
+        target_time = self.sim_time + dt
+        self.env.run(until=target_time)
+        self.sim_time = self.env.now
+        self._update_time_averages(self.sim_time)
 
     def get_snapshot(self) -> SimulationStateSnapshot:
         queue_copy = list(self._queue)
@@ -133,7 +130,7 @@ class SimulationEngine:
             if srv.busy and srv.patient_id is not None:
                 in_service_view[idx] = {
                     "patient_id": srv.patient_id,
-                    "remaining": max(srv.time_remaining, 0.0),
+                    "remaining": max(srv.service_end_time - self.sim_time, 0.0),
                 }
             else:
                 in_service_view[idx] = {"patient_id": None, "remaining": 0.0}
@@ -143,69 +140,84 @@ class SimulationEngine:
 
     # ---- internals ----
 
-    def _advance_one_tick(self, dt: float):
-        old_time = self.sim_time
-        new_time = self.sim_time + dt
+    def _arrival_generator(self):
+        while True:
+            interarrival = self._sample_interarrival_time()
+            if math.isinf(interarrival):
+                return
+            yield self.env.timeout(interarrival)
+            self._on_new_patient(self.env.now)
 
-        # arrivals that happen within (old_time, new_time]
-        while self._next_arrival_time is not None and self._next_arrival_time <= new_time:
-            arrival_t = self._next_arrival_time
-            self.sim_time = arrival_t
-            self._on_new_patient(arrival_t)
-            # Allow immediately-available servers to start service at the exact
-            # arrival timestamp.
-            self._assign_waiting_patients()
-            self._next_arrival_time = self.sim_time + self._sample_interarrival_time()
-
-        self.sim_time = new_time
-
-        self._update_servers(dt)
-        self._assign_waiting_patients()
-        self._sample_lengths()
-
-    def _on_new_patient(self, t: float):
+    def _on_new_patient(self, now: float):
+        self._update_time_averages(now)
         pid = self._next_patient_id
         self._next_patient_id += 1
-        self._patients[pid] = Patient(patient_id=pid, arrival_time=t)
+        self._patients[pid] = Patient(patient_id=pid, arrival_time=now)
         self._queue.append(pid)
+        self._refresh_lengths(now)
+        self._assign_waiting_patients(now)
 
-    def _assign_waiting_patients(self):
+    def _assign_waiting_patients(self, now: float):
         for srv in self._servers:
             if not self._queue:
                 break
             if srv.busy:
                 continue
+            service_time = self._sample_service_time()
+            if math.isinf(service_time):
+                continue
+
             pid = self._queue.pop(0)
             patient = self._patients[pid]
-            patient.service_start_time = self.sim_time
+            patient.service_start_time = now
+
+            self._update_time_averages(now)
             srv.busy = True
             srv.patient_id = pid
-            srv.time_remaining = self._sample_service_time()
+            srv.service_end_time = now + service_time
+            self._refresh_lengths(now)
 
-    def _update_servers(self, dt: float):
-        for srv in self._servers:
-            if not srv.busy:
-                continue
-            srv.time_remaining -= dt
-            if srv.time_remaining <= 0.0 and srv.patient_id is not None:
-                overshoot = -srv.time_remaining
-                completion_time = self.sim_time - overshoot
-                pid = srv.patient_id
-                patient = self._patients[pid]
-                patient.service_end_time = completion_time
-                if patient.service_start_time is not None:
-                    self._total_wait_time += (patient.service_start_time - patient.arrival_time)
-                self._total_system_time += (patient.service_end_time - patient.arrival_time)
-                self._served_patients += 1
-                srv.busy = False
-                srv.patient_id = None
-                srv.time_remaining = 0.0
+            self.env.process(self._service_patient(srv, pid, service_time))
 
-    def _sample_lengths(self):
-        q = len(self._queue)
-        busy = sum(1 for s in self._servers if s.busy)
-        self._queue_length_samples.append(q)
-        self._system_length_samples.append(q + busy)
+    def _service_patient(self, srv: ServerSlot, pid: int, service_time: float):
+        yield self.env.timeout(service_time)
+        self._on_service_completed(srv, pid, self.env.now)
+
+    def _on_service_completed(self, srv: ServerSlot, pid: int, now: float):
+        self._update_time_averages(now)
+        if srv.patient_id != pid:
+            return
+
+        patient = self._patients.get(pid)
+        if not patient:
+            return
+
+        patient.service_end_time = now
+        if patient.service_start_time is not None:
+            self._total_wait_time += (patient.service_start_time - patient.arrival_time)
+        self._total_system_time += (patient.service_end_time - patient.arrival_time)
+        self._served_patients += 1
+
+        srv.busy = False
+        srv.patient_id = None
+        srv.service_end_time = now
+        self._refresh_lengths(now)
+        self._assign_waiting_patients(now)
+
+    def _busy_servers(self) -> int:
+        return sum(1 for srv in self._servers if srv.busy)
+
+    def _refresh_lengths(self, now: float):
+        self._current_queue_length = len(self._queue)
+        self._current_system_length = self._current_queue_length + self._busy_servers()
+        self._last_sample_time = now
+
+    def _update_time_averages(self, now: float):
+        dt = now - self._last_sample_time
+        if dt > 0:
+            self._queue_time_integral += self._current_queue_length * dt
+            self._system_time_integral += self._current_system_length * dt
+            self._last_sample_time = now
 
     def _sample_interarrival_time(self) -> float:
         lam = self.params.arrival_rate_lambda
@@ -228,8 +240,10 @@ class SimulationEngine:
 
         avg_Wq = (self._total_wait_time / self._served_patients) if self._served_patients > 0 else None
         avg_W = (self._total_system_time / self._served_patients) if self._served_patients > 0 else None
-        avg_Lq = (sum(self._queue_length_samples) / len(self._queue_length_samples)) if self._queue_length_samples else None
-        avg_L = (sum(self._system_length_samples) / len(self._system_length_samples)) if self._system_length_samples else None
+
+        total_time = self.sim_time if self.sim_time > 0 else None
+        avg_Lq = (self._queue_time_integral / total_time) if total_time else None
+        avg_L = (self._system_time_integral / total_time) if total_time else None
 
         analytical = erlang_c_metrics(lam, mu, c)
 

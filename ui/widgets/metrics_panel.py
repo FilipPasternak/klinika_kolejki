@@ -35,10 +35,10 @@ class MetricsPanel(QWidget):
         layout.setSpacing(10)
 
         self.empirical_group, self.empirical_values = self._create_metrics_group(
-            "Empirical metrics"
+            "Metryki empiryczne"
         )
         self.theoretical_group, self.theoretical_values = self._create_metrics_group(
-            "Analytical metrics"
+            "Metryki analityczne"
         )
 
         layout.addWidget(self.empirical_group)

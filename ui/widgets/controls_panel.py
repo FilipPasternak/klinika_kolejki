@@ -24,6 +24,7 @@ class ControlsPanel(QWidget):
     pause_requested = pyqtSignal()
     reset_requested = pyqtSignal()
     params_changed = pyqtSignal(float, float, int)
+    time_scale_changed = pyqtSignal(float)
 
     def __init__(self, engine, parent=None):
         super().__init__(parent)
@@ -56,18 +57,26 @@ class ControlsPanel(QWidget):
         self.servers_spin.setSingleStep(1)
         self.servers_spin.valueChanged.connect(self._on_params_changed)
 
-        form_layout.addRow(_format_label("Arrival rate λ"), self.lambda_spin)
-        form_layout.addRow(_format_label("Service rate μ"), self.mu_spin)
-        form_layout.addRow(_format_label("Servers c"), self.servers_spin)
+        self.time_scale_spin = QDoubleSpinBox()
+        self.time_scale_spin.setRange(0.1, 20.0)
+        self.time_scale_spin.setDecimals(2)
+        self.time_scale_spin.setSingleStep(0.1)
+        self.time_scale_spin.setSuffix("×")
+        self.time_scale_spin.valueChanged.connect(self._on_time_scale_changed)
+
+        form_layout.addRow(_format_label("Natężenie napływu λ [pacj./h]"), self.lambda_spin)
+        form_layout.addRow(_format_label("Szybkość obsługi μ [pacj./h]"), self.mu_spin)
+        form_layout.addRow(_format_label("Liczba stanowisk c"), self.servers_spin)
+        form_layout.addRow(_format_label("Przyspieszenie czasu"), self.time_scale_spin)
 
         layout.addLayout(form_layout)
 
         button_row = QHBoxLayout()
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.start_requested.emit)
-        self.pause_button = QPushButton("Pause")
+        self.pause_button = QPushButton("Pauza")
         self.pause_button.clicked.connect(self.pause_requested.emit)
-        self.reset_button = QPushButton("Reset")
+        self.reset_button = QPushButton("Resetuj")
         self.reset_button.clicked.connect(self.reset_requested.emit)
 
         button_row.addWidget(self.start_button)
@@ -82,6 +91,7 @@ class ControlsPanel(QWidget):
         self._set_spin_value(self.lambda_spin, params.arrival_rate_lambda)
         self._set_spin_value(self.mu_spin, params.service_rate_mu)
         self._set_spin_value(self.servers_spin, params.servers_c)
+        self._set_spin_value(self.time_scale_spin, params.time_scale)
 
     @staticmethod
     def _set_spin_value(spinbox, value):
@@ -91,12 +101,17 @@ class ControlsPanel(QWidget):
         finally:
             spinbox.blockSignals(block)
 
-    def _on_params_changed(self):
+    def _on_params_changed(self, *_):
         lam = self.lambda_spin.value()
         mu = self.mu_spin.value()
         servers = self.servers_spin.value()
         self.engine.set_params(lam, mu, servers)
         self.params_changed.emit(lam, mu, servers)
+
+    def _on_time_scale_changed(self, value: float):
+        scale = value
+        self.engine.set_time_scale(scale)
+        self.time_scale_changed.emit(scale)
 
     def refresh(self):
         """Public method to resynchronise the controls with the engine state."""

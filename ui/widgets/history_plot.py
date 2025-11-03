@@ -15,8 +15,8 @@ class HistoryPlotWidget(QWidget):
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setBackground("w")
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        self.plot_widget.setLabel("left", "Queue length")
-        self.plot_widget.setLabel("bottom", "Simulation time", units="h")
+        self.plot_widget.setLabel("left", "Długość kolejki")
+        self.plot_widget.setLabel("bottom", "Czas symulacji", units="h")
 
         self._curve = self.plot_widget.plot(pen=pg.mkPen(color=(239, 71, 111), width=2))
         layout.addWidget(self.plot_widget)

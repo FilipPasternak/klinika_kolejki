@@ -1,9 +1,20 @@
-"""Application entry point (GUI not yet implemented).
-For now, see quick_test.py to run a headless simulation.
-"""
+"""Application entry point for the clinic queue simulation GUI."""
+
+import sys
+
+from PyQt6.QtWidgets import QApplication
+
+from simulation.engine import SimulationEngine
+from ui.main_window import MainWindow
+
 
 def main():
-    print("GUI not implemented yet. Run quick_test.py for a console demo.")
+    app = QApplication(sys.argv)
+    engine = SimulationEngine()
+    window = MainWindow(engine)
+    window.show()
+    return app.exec()
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -106,6 +106,14 @@ class SimulationEngine:
     def pause(self):
         self._running = False
 
+    def resume(self):
+        """Resume the simulation without resetting any state."""
+        if self._servers:
+            self._running = True
+
+    def is_running(self) -> bool:
+        return self._running
+
     def step(self, dt: float):
         if not self._running or dt <= 0:
             return

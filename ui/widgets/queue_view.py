@@ -1,5 +1,7 @@
+import math
+
 from PyQt6.QtCore import QTimer, QPointF
-from PyQt6.QtGui import QBrush, QColor, QPen
+from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -15,7 +17,9 @@ QUEUE_SPACING = 42
 SERVER_SPACING = 90
 QUEUE_Y = 120
 SERVER_Y = 20
-ANIMATION_SPEED = 0.25
+SMOOTH_MIN_STEP = 0.12
+SMOOTH_MAX_STEP = 0.45
+SMOOTH_DISTANCE_SCALE = 60.0
 
 
 class QueueView(QWidget):
@@ -26,7 +30,7 @@ class QueueView(QWidget):
         self.engine = engine
         self.scene = QGraphicsScene(self)
         self.view = QGraphicsView(self.scene)
-        self.view.setRenderHints(self.view.renderHints())
+        self.view.setRenderHints(self.view.renderHints() | QPainter.RenderHint.Antialiasing)
         self.view.setMinimumSize(360, 240)
         self.view.setSceneRect(-40, -40, 600, 320)
 
@@ -39,7 +43,7 @@ class QueueView(QWidget):
         self.server_labels = []
 
         self._refresh_timer = QTimer(self)
-        self._refresh_timer.setInterval(80)
+        self._refresh_timer.setInterval(40)
         self._refresh_timer.timeout.connect(self._on_tick)
 
         self._ensure_server_slots(self.engine.params.servers_c)
@@ -109,7 +113,7 @@ class QueueView(QWidget):
             rect.setBrush(QBrush(QColor(220, 235, 255)))
             self.scene.addItem(rect)
 
-            label = QGraphicsSimpleTextItem(f"S{idx + 1}")
+            label = QGraphicsSimpleTextItem(f"Stan. {idx + 1}")
             label.setBrush(QBrush(QColor("#1b4f72")))
             self.scene.addItem(label)
 
@@ -168,7 +172,10 @@ class QueueView(QWidget):
                 self._move_patient_immediately(pid)
                 continue
 
-            new_pos = current + delta * ANIMATION_SPEED
+            distance = math.hypot(delta.x(), delta.y())
+            step = 1.0 - math.exp(-distance / SMOOTH_DISTANCE_SCALE)
+            step = max(SMOOTH_MIN_STEP, min(step, SMOOTH_MAX_STEP))
+            new_pos = current + delta * step
             item.setPos(new_pos.x() - PATIENT_RADIUS, new_pos.y() - PATIENT_RADIUS)
             label.setPos(new_pos.x() - label.boundingRect().width() / 2, new_pos.y() - 10)
 

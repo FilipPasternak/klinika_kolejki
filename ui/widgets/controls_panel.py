@@ -24,6 +24,7 @@ class ControlsPanel(QWidget):
     pause_requested = pyqtSignal()
     reset_requested = pyqtSignal()
     params_changed = pyqtSignal(float, float, int)
+    priority_changed = pyqtSignal(float)
     time_scale_changed = pyqtSignal(float)
 
     def __init__(self, engine, parent=None):
@@ -57,6 +58,13 @@ class ControlsPanel(QWidget):
         self.servers_spin.setSingleStep(1)
         self.servers_spin.valueChanged.connect(self._on_params_changed)
 
+        self.priority_spin = QDoubleSpinBox()
+        self.priority_spin.setRange(0.0, 100.0)
+        self.priority_spin.setDecimals(1)
+        self.priority_spin.setSingleStep(1.0)
+        self.priority_spin.setSuffix(" %")
+        self.priority_spin.valueChanged.connect(self._on_priority_changed)
+
         self.time_scale_spin = QDoubleSpinBox()
         self.time_scale_spin.setRange(0.1, 20.0)
         self.time_scale_spin.setDecimals(2)
@@ -67,6 +75,7 @@ class ControlsPanel(QWidget):
         form_layout.addRow(_format_label("Natężenie napływu λ [pacj./h]"), self.lambda_spin)
         form_layout.addRow(_format_label("Szybkość obsługi μ [pacj./h]"), self.mu_spin)
         form_layout.addRow(_format_label("Liczba stanowisk c"), self.servers_spin)
+        form_layout.addRow(_format_label("Udział priorytetów"), self.priority_spin)
         form_layout.addRow(_format_label("Przyspieszenie czasu"), self.time_scale_spin)
 
         layout.addLayout(form_layout)
@@ -91,6 +100,7 @@ class ControlsPanel(QWidget):
         self._set_spin_value(self.lambda_spin, params.arrival_rate_lambda)
         self._set_spin_value(self.mu_spin, params.service_rate_mu)
         self._set_spin_value(self.servers_spin, params.servers_c)
+        self._set_spin_value(self.priority_spin, params.priority_probability * 100.0)
         self._set_spin_value(self.time_scale_spin, params.time_scale)
 
     @staticmethod
@@ -107,6 +117,11 @@ class ControlsPanel(QWidget):
         servers = self.servers_spin.value()
         self.engine.set_params(lam, mu, servers)
         self.params_changed.emit(lam, mu, servers)
+
+    def _on_priority_changed(self, value: float):
+        probability = max(min(value / 100.0, 1.0), 0.0)
+        self.engine.set_priority_probability(probability)
+        self.priority_changed.emit(probability)
 
     def _on_time_scale_changed(self, value: float):
         scale = value

@@ -22,7 +22,7 @@ def _value_label() -> QLabel:
 
 
 class MetricsPanel(QWidget):
-    """Displays empirical and theoretical metrics from the simulation engine."""
+    """Displays empirical metrics from the simulation engine."""
 
     def __init__(self, engine, parent=None):
         super().__init__(parent)
@@ -37,12 +37,8 @@ class MetricsPanel(QWidget):
         self.empirical_group, self.empirical_values = self._create_metrics_group(
             "Metryki empiryczne"
         )
-        self.theoretical_group, self.theoretical_values = self._create_metrics_group(
-            "Metryki analityczne"
-        )
 
         layout.addWidget(self.empirical_group)
-        layout.addWidget(self.theoretical_group)
         layout.addStretch()
 
     def _create_metrics_group(self, title: str):
@@ -66,19 +62,13 @@ class MetricsPanel(QWidget):
     def reset(self):
         for label in self.empirical_values.values():
             label.setText("–")
-        for label in self.theoretical_values.values():
-            label.setText("–")
 
     def update_from_snapshot(self, snapshot):
         metrics = snapshot.metrics
         empirical = metrics.get("empirical", {})
-        theoretical = metrics.get("theoretical", {})
 
         for key, label in self.empirical_values.items():
             label.setText(self._format_value(empirical.get(key)))
-
-        for key, label in self.theoretical_values.items():
-            label.setText(self._format_value(theoretical.get(key)))
 
     @staticmethod
     def _format_value(value):

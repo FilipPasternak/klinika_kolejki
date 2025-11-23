@@ -5,6 +5,8 @@ from PyQt6.QtGui import QBrush, QColor, QPen, QPainter
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
     QGraphicsScene,
     QGraphicsView,
     QGraphicsEllipseItem,
@@ -25,6 +27,9 @@ PRIMARY_COLOR = QColor("#ef476f")
 PRIMARY_PEN = QColor("#9b1d2a")
 PRIORITY_COLOR = QColor("#ffd166")
 PRIORITY_PEN = QColor("#c27f00")
+SERVER_PEN = QColor("#1b4f72")
+SERVER_BRUSH = QColor("#e8f0ff")
+LEGEND_BG = QColor(255, 255, 255, 235)
 
 
 class QueueView(QWidget):
@@ -34,6 +39,7 @@ class QueueView(QWidget):
         super().__init__(parent)
         self.engine = engine
         self.scene = QGraphicsScene(self)
+        self.scene.setBackgroundBrush(QColor("#f9fbff"))
         self.view = QGraphicsView(self.scene)
         self.view.setRenderHints(self.view.renderHints() | QPainter.RenderHint.Antialiasing)
         self.view.setMinimumSize(360, 240)
@@ -41,6 +47,9 @@ class QueueView(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+
+        legend = self._build_legend()
+        layout.addLayout(legend)
         layout.addWidget(self.view)
 
         self.patient_items = {}
@@ -53,6 +62,33 @@ class QueueView(QWidget):
 
         self._ensure_server_slots(self.engine.params.servers_c)
         self.sync_once()
+
+    def _build_legend(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(6, 4, 6, 10)
+        layout.setSpacing(12)
+
+        def _item(color: QColor, text: str) -> QWidget:
+            container = QWidget()
+            row = QHBoxLayout(container)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(6)
+            swatch = QLabel()
+            swatch.setFixedSize(18, 18)
+            swatch.setStyleSheet(
+                f"background: {color.name()}; border: 1px solid #d6deeb; border-radius: 5px;"
+            )
+            label = QLabel(text)
+            label.setStyleSheet("color: #334e68; font-weight: 600;")
+            row.addWidget(swatch)
+            row.addWidget(label)
+            return container
+
+        layout.addWidget(_item(PRIMARY_COLOR, "Pacjent standardowy"))
+        layout.addWidget(_item(PRIORITY_COLOR, "Pacjent priorytetowy"))
+        layout.addWidget(_item(QColor("#2d7dd2"), "Stanowiska"))
+        layout.addStretch()
+        return layout
 
     def start(self):
         if not self._refresh_timer.isActive():
@@ -116,12 +152,12 @@ class QueueView(QWidget):
         while len(self.server_slots) < count:
             idx = len(self.server_slots)
             rect = QGraphicsRectItem(-25, -15, 50, 30)
-            rect.setPen(QPen(QColor("#2d7dd2"), 2))
-            rect.setBrush(QBrush(QColor(220, 235, 255)))
+            rect.setPen(QPen(SERVER_PEN, 2.2))
+            rect.setBrush(QBrush(SERVER_BRUSH))
             self.scene.addItem(rect)
 
             label = QGraphicsSimpleTextItem(f"Stan. {idx + 1}")
-            label.setBrush(QBrush(QColor("#1b4f72")))
+            label.setBrush(QBrush(SERVER_PEN))
             self.scene.addItem(label)
 
             self.server_slots.append(rect)

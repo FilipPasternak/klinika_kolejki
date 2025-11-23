@@ -29,20 +29,8 @@ def _collect_pw_heatmap(lambdas, servers_list, mu):
     return heatmap
 
 
-def test_generate_queueing_report(tmp_path: Path):
-    """Generate a visual report with classical queueing dependencies.
-
-    The test builds four plots commonly inspected in M/M/c systems:
-    - Waiting time (Wq) vs. arrival rate (lambda) for a fixed server pool.
-    - Queue length (Lq) vs. arrival rate (lambda).
-    - Probability of waiting (Pw) heatmap across arrival rates and server counts.
-    - Time in system (W) as the number of servers changes for a fixed load.
-
-    The resulting figure and JSON summary allow quick inspection of stability
-    regions and how utilization drives queue growth. The test asserts that the
-    artifacts are produced with non-zero size to catch regressions in the
-    reporting workflow.
-    """
+def test_generate_queueing_report():
+    """Generate a visual report with classical queueing dependencies."""
 
     mu = 4.0
     servers = 3
@@ -53,19 +41,29 @@ def test_generate_queueing_report(tmp_path: Path):
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
-    axes[0, 0].plot([row["lambda"] for row in data], [row["Wq"] for row in data], marker="o")
+    axes[0, 0].plot([row["lambda"] for row in data],
+                    [row["Wq"] for row in data],
+                    marker="o")
     axes[0, 0].set_title("Oczekiwanie w kolejce vs. natężenie przyjazdów")
     axes[0, 0].set_xlabel("λ [pacjenci/h]")
     axes[0, 0].set_ylabel("Wq [h]")
 
-    axes[0, 1].plot([row["lambda"] for row in data], [row["Lq"] for row in data], marker="s", color="darkorange")
+    axes[0, 1].plot([row["lambda"] for row in data],
+                    [row["Lq"] for row in data],
+                    marker="s")
     axes[0, 1].set_title("Średnia długość kolejki vs. λ")
     axes[0, 1].set_xlabel("λ [pacjenci/h]")
     axes[0, 1].set_ylabel("Lq [liczba pacjentów]")
 
     server_choices = [1, 2, 3, 4]
     heatmap = _collect_pw_heatmap(lambda_values, server_choices, mu)
-    heatmap_plot = axes[1, 0].imshow(heatmap, aspect="auto", origin="lower", extent=[lambda_values[0], lambda_values[-1], server_choices[0], server_choices[-1]])
+    heatmap_plot = axes[1, 0].imshow(
+        heatmap,
+        aspect="auto",
+        origin="lower",
+        extent=[lambda_values[0], lambda_values[-1],
+                server_choices[0], server_choices[-1]],
+    )
     axes[1, 0].set_title("Prawdopodobieństwo oczekiwania Pw")
     axes[1, 0].set_xlabel("λ [pacjenci/h]")
     axes[1, 0].set_ylabel("Liczba serwerów")
@@ -77,14 +75,23 @@ def test_generate_queueing_report(tmp_path: Path):
         metrics = erlang_c_metrics(lambda_fixed, mu, c)
         if metrics["W"] is not None:
             w_per_servers.append((c, metrics["W"]))
-    axes[1, 1].plot([c for c, _ in w_per_servers], [w for _, w in w_per_servers], marker="^", color="seagreen")
+
+    axes[1, 1].plot(
+        [c for c, _ in w_per_servers],
+        [w for _, w in w_per_servers],
+        marker="^",
+    )
     axes[1, 1].set_title("Czas w systemie vs. liczba serwerów")
     axes[1, 1].set_xlabel("Serwery c")
     axes[1, 1].set_ylabel("W [h]")
 
     plt.tight_layout()
 
-    report_path = tmp_path / "queueing_report.png"
+    # <<< tu zmiana: zapis w tym samym folderze co plik testu >>>
+    base_dir = Path(__file__).parent
+    report_path = base_dir / "queueing_report.png"
+    summary_path = base_dir / "queueing_report_summary.json"
+
     fig.savefig(report_path, dpi=150)
     assert report_path.exists() and report_path.stat().st_size > 0
 
@@ -96,6 +103,5 @@ def test_generate_queueing_report(tmp_path: Path):
         "servers_vs_W": w_per_servers,
     }
 
-    summary_path = tmp_path / "queueing_report_summary.json"
-    summary_path.write_text(json.dumps(summary, indent=2))
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     assert summary_path.exists() and summary_path.stat().st_size > 0

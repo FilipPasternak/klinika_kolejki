@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.DS_Store
+
+# Test artifacts and generated visuals
+/tests/*.png
+/tests/*.json
+/tests/artifacts/

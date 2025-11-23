@@ -21,6 +21,11 @@ SMOOTH_MIN_STEP = 0.12
 SMOOTH_MAX_STEP = 0.45
 SMOOTH_DISTANCE_SCALE = 60.0
 
+PRIMARY_COLOR = QColor("#ef476f")
+PRIMARY_PEN = QColor("#9b1d2a")
+PRIORITY_COLOR = QColor("#ffd166")
+PRIORITY_PEN = QColor("#c27f00")
+
 
 class QueueView(QWidget):
     """Visual representation of patients waiting and being served."""
@@ -80,7 +85,8 @@ class QueueView(QWidget):
         # Queue positions
         for idx, pid in enumerate(snapshot.queue):
             pos = QPointF(idx * QUEUE_SPACING, QUEUE_Y)
-            self._set_patient_target(pid, pos, immediate)
+            is_priority = pid in snapshot.priority_patients
+            self._set_patient_target(pid, pos, immediate, is_priority)
             active_patients.add(pid)
             max_x = max(max_x, pos.x())
 
@@ -90,7 +96,8 @@ class QueueView(QWidget):
             if pid is None:
                 continue
             pos = QPointF(srv_idx * SERVER_SPACING, SERVER_Y)
-            self._set_patient_target(pid, pos, immediate)
+            is_priority = pid in snapshot.priority_patients
+            self._set_patient_target(pid, pos, immediate, is_priority)
             active_patients.add(pid)
             max_x = max(max_x, pos.x())
 
@@ -132,25 +139,40 @@ class QueueView(QWidget):
             label = self.server_labels[idx]
             label.setPos(x - label.boundingRect().width() / 2, SERVER_Y - 30)
 
-    def _set_patient_target(self, pid: int, pos: QPointF, immediate: bool):
+    def _set_patient_target(
+        self, pid: int, pos: QPointF, immediate: bool, is_priority: bool
+    ):
         if pid not in self.patient_items:
             item = QGraphicsEllipseItem(-PATIENT_RADIUS, -PATIENT_RADIUS, PATIENT_RADIUS * 2, PATIENT_RADIUS * 2)
-            item.setBrush(QBrush(QColor("#ef476f")))
-            item.setPen(QPen(QColor("#9b1d2a"), 1.5))
+            self._apply_patient_style(item, is_priority)
             self.scene.addItem(item)
 
             label = QGraphicsSimpleTextItem(str(pid))
             label.setBrush(QBrush(QColor("white")))
             self.scene.addItem(label)
 
-            self.patient_items[pid] = {"item": item, "label": label, "target": QPointF(pos)}
+            self.patient_items[pid] = {
+                "item": item,
+                "label": label,
+                "target": QPointF(pos),
+            }
             item.setPos(pos.x() - PATIENT_RADIUS, pos.y() - PATIENT_RADIUS)
             label.setPos(pos.x() - label.boundingRect().width() / 2, pos.y() - 10)
             return
 
+        self._apply_patient_style(self.patient_items[pid]["item"], is_priority)
         self.patient_items[pid]["target"] = QPointF(pos)
         if immediate:
             self._move_patient_immediately(pid)
+
+    @staticmethod
+    def _apply_patient_style(item: QGraphicsEllipseItem, is_priority: bool):
+        if is_priority:
+            item.setBrush(QBrush(PRIORITY_COLOR))
+            item.setPen(QPen(PRIORITY_PEN, 1.5))
+            return
+        item.setBrush(QBrush(PRIMARY_COLOR))
+        item.setPen(QPen(PRIMARY_PEN, 1.5))
 
     def _move_patient_immediately(self, pid: int):
         data = self.patient_items[pid]

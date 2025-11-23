@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         self.controls_panel.pause_requested.connect(self._on_pause_requested)
         self.controls_panel.reset_requested.connect(self._on_reset_requested)
         self.controls_panel.params_changed.connect(self._on_params_changed)
+        self.controls_panel.priority_changed.connect(self._on_priority_changed)
         self.controls_panel.time_scale_changed.connect(self._on_time_scale_changed)
 
     def _create_timer(self):
@@ -115,6 +116,10 @@ class MainWindow(QMainWindow):
         self._prepare_new_run(clear_history=True)
 
     def _on_params_changed(self, *_):
+        if not self.engine.is_running():
+            self._prepare_new_run(clear_history=True)
+
+    def _on_priority_changed(self, *_):
         if not self.engine.is_running():
             self._prepare_new_run(clear_history=True)
 

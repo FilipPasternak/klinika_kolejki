@@ -19,6 +19,69 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("Symulacja kolejki w klinice")
         self.engine = engine
+        self.setMinimumSize(1100, 720)
+
+        self.setStyleSheet(
+            """
+            QWidget {
+                font-family: 'Inter', 'Segoe UI', sans-serif;
+                font-size: 12pt;
+                color: #1f2933;
+                background: #f6f8fb;
+            }
+            QGroupBox {
+                border: 1px solid #d6deeb;
+                border-radius: 12px;
+                margin-top: 12px;
+                background: #ffffff;
+                padding: 12px 12px 16px 12px;
+            }
+            QGroupBox::title {
+                color: #1b4f72;
+                font-weight: 700;
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 4px;
+            }
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2d7dd2, stop:1 #1b4f72);
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 10px;
+                font-weight: 700;
+            }
+            QPushButton:hover { background: #2f8de0; }
+            QPushButton:pressed { background: #1f5c99; }
+            QPushButton:disabled {
+                background: #d6deeb;
+                color: #7b8794;
+            }
+            QDoubleSpinBox, QSpinBox {
+                border: 1px solid #d6deeb;
+                border-radius: 8px;
+                padding: 6px 8px;
+                background: #ffffff;
+                selection-background-color: #2d7dd2;
+            }
+            QLabel.section-title {
+                font-size: 14pt;
+                font-weight: 800;
+                color: #102a43;
+                padding-bottom: 4px;
+            }
+            QLabel.helper-text {
+                color: #52606d;
+                font-size: 10pt;
+            }
+            QGraphicsView {
+                background: #ffffff;
+                border: 1px solid #d6deeb;
+                border-radius: 12px;
+            }
+            """
+        )
 
         self._time_step = 0.1  # simulation hours per timer tick
         self._engine_initialized = False
@@ -32,8 +95,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         layout = QHBoxLayout(central)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
 
         self.controls_panel = ControlsPanel(self.engine)
         self.queue_view = QueueView(self.engine)

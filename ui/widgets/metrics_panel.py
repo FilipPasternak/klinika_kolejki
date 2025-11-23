@@ -11,13 +11,14 @@ from PyQt6.QtWidgets import (
 def _metric_label(name: str) -> QLabel:
     label = QLabel(name)
     label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-    label.setStyleSheet("font-weight: bold;")
+    label.setStyleSheet("font-weight: bold; color: #102a43;")
     return label
 
 
 def _value_label() -> QLabel:
     label = QLabel("–")
     label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+    label.setStyleSheet("font-weight: 700; color: #1f2933;")
     return label
 
 
@@ -32,7 +33,16 @@ class MetricsPanel(QWidget):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
+
+        title = QLabel("Podgląd metryk")
+        title.setProperty("class", "section-title")
+        helper = QLabel("Bieżące wartości obciążenia i czasów oczekiwania w trakcie symulacji.")
+        helper.setProperty("class", "helper-text")
+        helper.setWordWrap(True)
+
+        layout.addWidget(title)
+        layout.addWidget(helper)
 
         self.empirical_group, self.empirical_values = self._create_metrics_group(
             "Metryki empiryczne"

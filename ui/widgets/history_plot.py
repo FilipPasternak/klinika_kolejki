@@ -13,12 +13,19 @@ class HistoryPlotWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setBackground("w")
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        self.plot_widget.setBackground("#ffffff")
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.25)
+        axis_pen = pg.mkPen(color="#52606d", width=1)
+        for axis in ("left", "bottom"):
+            ax = self.plot_widget.getAxis(axis)
+            ax.setPen(axis_pen)
+            ax.setTextPen(axis_pen)
         self.plot_widget.setLabel("left", "Długość kolejki")
         self.plot_widget.setLabel("bottom", "Czas symulacji", units="h")
+        self.plot_widget.setTitle("Historia zmian natężenia kolejki", color="#102a43")
 
-        self._curve = self.plot_widget.plot(pen=pg.mkPen(color=(239, 71, 111), width=2))
+        pen = pg.mkPen(color=(45, 125, 210), width=3)
+        self._curve = self.plot_widget.plot(pen=pen, fillLevel=0, brush=(45, 125, 210, 40))
         layout.addWidget(self.plot_widget)
 
         self._times = []

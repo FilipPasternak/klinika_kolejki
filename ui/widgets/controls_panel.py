@@ -8,12 +8,13 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
     QLabel,
+    QGroupBox,
 )
 
 
 def _format_label(text: str) -> QLabel:
     label = QLabel(text)
-    label.setStyleSheet("font-weight: bold;")
+    label.setStyleSheet("font-weight: bold; color: #102a43;")
     return label
 
 
@@ -36,26 +37,41 @@ class ControlsPanel(QWidget):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
 
+        header = QLabel("Sterowanie symulacją")
+        header.setObjectName("controls-header")
+        header.setProperty("class", "section-title")
+        helper = QLabel("Dostosuj parametry i zarządzaj przebiegiem symulacji w jednym miejscu.")
+        helper.setWordWrap(True)
+        helper.setProperty("class", "helper-text")
+        layout.addWidget(header)
+        layout.addWidget(helper)
+
+        parameters_group = QGroupBox("Parametry wejściowe")
         form_layout = QFormLayout()
         form_layout.setFormAlignment(form_layout.formAlignment() | Qt.AlignmentFlag.AlignLeft)
+        form_layout.setHorizontalSpacing(12)
+        form_layout.setVerticalSpacing(10)
 
         self.lambda_spin = QDoubleSpinBox()
         self.lambda_spin.setRange(0.1, 1000.0)
         self.lambda_spin.setDecimals(2)
         self.lambda_spin.setSingleStep(0.1)
+        self.lambda_spin.setToolTip("Średnia liczba pacjentów napływających w ciągu godziny")
         self.lambda_spin.valueChanged.connect(self._on_params_changed)
 
         self.mu_spin = QDoubleSpinBox()
         self.mu_spin.setRange(0.1, 1000.0)
         self.mu_spin.setDecimals(2)
         self.mu_spin.setSingleStep(0.1)
+        self.mu_spin.setToolTip("Średnia szybkość obsługi pacjentów na stanowisku")
         self.mu_spin.valueChanged.connect(self._on_params_changed)
 
         self.servers_spin = QSpinBox()
         self.servers_spin.setRange(1, 20)
         self.servers_spin.setSingleStep(1)
+        self.servers_spin.setToolTip("Liczba równoległych stanowisk obsługi")
         self.servers_spin.valueChanged.connect(self._on_params_changed)
 
         self.priority_spin = QDoubleSpinBox()
@@ -63,6 +79,7 @@ class ControlsPanel(QWidget):
         self.priority_spin.setDecimals(1)
         self.priority_spin.setSingleStep(1.0)
         self.priority_spin.setSuffix(" %")
+        self.priority_spin.setToolTip("Procent pacjentów obsługiwanych priorytetowo")
         self.priority_spin.valueChanged.connect(self._on_priority_changed)
 
         self.time_scale_spin = QDoubleSpinBox()
@@ -70,6 +87,7 @@ class ControlsPanel(QWidget):
         self.time_scale_spin.setDecimals(2)
         self.time_scale_spin.setSingleStep(0.1)
         self.time_scale_spin.setSuffix("×")
+        self.time_scale_spin.setToolTip("Przyspieszenie symulowanego czasu względem rzeczywistego")
         self.time_scale_spin.valueChanged.connect(self._on_time_scale_changed)
 
         form_layout.addRow(_format_label("Natężenie napływu λ [pacj./h]"), self.lambda_spin)
@@ -78,21 +96,29 @@ class ControlsPanel(QWidget):
         form_layout.addRow(_format_label("Udział priorytetów"), self.priority_spin)
         form_layout.addRow(_format_label("Przyspieszenie czasu"), self.time_scale_spin)
 
-        layout.addLayout(form_layout)
+        parameters_group.setLayout(form_layout)
+        layout.addWidget(parameters_group)
 
+        actions_group = QGroupBox("Sterowanie przebiegiem")
         button_row = QHBoxLayout()
+        button_row.setSpacing(10)
+
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.start_requested.emit)
+        self.start_button.setMinimumHeight(38)
         self.pause_button = QPushButton("Pauza")
         self.pause_button.clicked.connect(self.pause_requested.emit)
+        self.pause_button.setMinimumHeight(38)
         self.reset_button = QPushButton("Resetuj")
         self.reset_button.clicked.connect(self.reset_requested.emit)
+        self.reset_button.setMinimumHeight(38)
 
         button_row.addWidget(self.start_button)
         button_row.addWidget(self.pause_button)
         button_row.addWidget(self.reset_button)
 
-        layout.addLayout(button_row)
+        actions_group.setLayout(button_row)
+        layout.addWidget(actions_group)
         layout.addStretch()
 
     def _sync_with_engine(self):
